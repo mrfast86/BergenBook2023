@@ -9,6 +9,8 @@ import pause
 from datetime import datetime, date, timedelta
 import time
 import streamlit as st
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # --- CONFIGURATION ---
 user = '9094566'
@@ -33,15 +35,19 @@ preferred_courses = [
     "Valley Brook 9"
 ]
 # --- SETUP CHROME DRIVER ---
+
 def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--headless=new')  # IMPORTANT for cloud environments
-    chrome_options.binary_location = '/usr/bin/chromium-browser'  # Location in Streamlit Cloud
+    chrome_options.add_argument('--headless=new')
+    chrome_options.binary_location = '/usr/bin/chromium'  # Notice: correct path in Streamlit Cloud
 
-    driver = uc.Chrome(options=chrome_options)
+    driver = uc.Chrome(
+        options=chrome_options,
+        driver_executable_path=ChromeDriverManager().install()
+    )
 
     stealth(driver,
         languages=["en-US", "en"],
