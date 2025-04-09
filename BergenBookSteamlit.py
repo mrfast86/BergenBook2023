@@ -35,10 +35,11 @@ preferred_courses = [
 # --- SETUP CHROME DRIVER ---
 def setup_driver():
     chrome_options = Options()
-    # chrome_options.add_argument('--headless')  # Optional headless mode
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--headless=new')  # IMPORTANT for cloud environments
+    chrome_options.binary_location = '/usr/bin/chromium-browser'  # Location in Streamlit Cloud
 
     driver = uc.Chrome(options=chrome_options)
 

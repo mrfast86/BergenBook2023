@@ -1,3 +1,5 @@
-pause==0.3
-selenium>=4.11.2
-undetected_chromedriver>=3.4.6
+streamlit
+undetected-chromedriver
+selenium
+selenium-stealth
+pause
