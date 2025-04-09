@@ -8,6 +8,7 @@ from selenium_stealth import stealth
 import pause
 from datetime import datetime, date, timedelta
 import time
+import streamlit as st
 
 # --- CONFIGURATION ---
 user = '9094566'
@@ -448,4 +449,47 @@ def main():
             driver.__del__ = lambda: None
 
 if __name__ == '__main__':
-    main()
+    st.title('🏌️ BergenBook Auto Tee Time')
+    st.write('Fill in your booking details below:')
+
+    user = st.text_input('User ID', '9094566')
+    password = st.text_input('Password', 'Cp4iJ30z', type='password')
+    month_and_day = st.text_input('Date (MM/DD)', '04/16')
+    player = st.selectbox('Number of Players', ['1', '2', '3', '4'])
+    tee_time = st.text_input('Preferred Tee Time', '12:00 PM')
+
+    preferred_courses = [
+        "Rockleigh R/W 18",
+        "Darlington 18",
+        "Overpeck 18",
+        "Soldier Hill 18",
+        "Valley Brook 18",
+        "Orchard Hills",
+        "Darlington Back 9",
+        "Overpeck Back 9",
+        "Rockleigh Back 9",
+        "Rockleigh Blue 9",
+        "Soldier Hill Back 9",
+        "Valley Brook 9"
+    ]
+    desired_course_name = st.selectbox('Course', preferred_courses)
+
+    run_script = st.button('🚀 Run Booking')
+
+    if run_script:
+        st.write('Booking in progress... please keep this tab open.')
+        try:
+            # Assign input values to the variables your script uses
+            globals()['user'] = user
+            globals()['password'] = password
+            globals()['month_and_day'] = month_and_day
+            globals()['player'] = player
+            globals()['tee_time'] = tee_time
+            globals()['desired_course_name'] = desired_course_name
+
+            main()  # Run your existing automation function
+
+            st.success('🎉 Done! Booking process completed. Check the output logs above.')
+
+        except Exception as e:
+            st.error(f'Error: {e}')

@@ -12,9 +12,9 @@ import time
 # --- CONFIGURATION ---
 user = '9094566'
 password = 'Cp4iJ30z'
-month_and_day = '04/16'  # MM/DD format
-player = '4'
-tee_time = '12:00 PM'
+month_and_day = '04/15'  # MM/DD format
+player = '1'
+tee_time = '7:20 AM'
 desired_course_name = "Rockleigh R/W 18"  # Replace with your course!
 preferred_courses = [
     "Rockleigh R/W 18",      # 🥇 Top priority
@@ -31,6 +31,7 @@ preferred_courses = [
     "Soldier Hill Back 9",
     "Valley Brook 9"
 ]
+
 # --- SETUP CHROME DRIVER ---
 def setup_driver():
     chrome_options = Options()
@@ -128,16 +129,10 @@ def wait_until_booking(driver, wait):
     print(f"📅 Date of play: {date_of_play}")
     print(f"🕖 Booking initiation time: {booking_time}")
 
-    # (Optional) If testing, comment out
-    if booking_time < datetime.now():
-        print(f"⚠️ Booking initiation time already passed: {booking_time}")
-        return False
-
     # Step 1: Pre-wait loop until very close to booking time
     while True:
         now = datetime.now()
         seconds_left = (booking_time - now).total_seconds()
-        dismiss_popup(driver, wait)
 
         if seconds_left <= 10:
             print("⏱️ Less than 10 seconds to go — entering tight wait...")
@@ -158,7 +153,6 @@ def wait_until_booking(driver, wait):
     print(f"🚀 Booking time reached: {datetime.now()} — Starting course selection...")
 
     try:
-        dismiss_popup(driver, wait)
         # Step 3: Open the course selection dropdown
         dropdown_xpath = "//div[contains(@class, 'mat-select-value') and .//span[contains(text(), 'Multiple Courses Selected')]]"
         dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, dropdown_xpath)))
@@ -177,13 +171,6 @@ def wait_until_booking(driver, wait):
         course_option = wait.until(EC.element_to_be_clickable((By.XPATH, course_option_xpath)))
         driver.execute_script("arguments[0].click();", course_option)
         print(f"✅ Course '{desired_course_name}' selected.")
-
-        # ✅ Step 6: Click the "Done" button to close dropdown
-        done_button_xpath = "//button[.//span[normalize-space(text())='Done']]"
-        done_button = wait.until(EC.element_to_be_clickable((By.XPATH, done_button_xpath)))
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", done_button)
-        driver.execute_script("arguments[0].click();", done_button)
-        print("✅ 'Done' button clicked to finalize course selection.")
 
         return True
 
@@ -222,55 +209,34 @@ def select_date(driver, wait):
         raise
 
 def select_time(driver, wait):
-    print(f"🎯 Selecting time: {tee_time}")
+    print(f"Selecting time: {tee_time}")
 
-    # Parse the desired time
+    # Convert time to match the HTML 'time' tag
     hour, minute_ampm = tee_time.split(':')
     minute, ampm = minute_ampm.strip().split(' ')
-    today = date.today()
-    booking_date = f"{today.year}-{month_and_day[:2]}-{month_and_day[3:]}"
+
+    # Compose the datetime string for the 'datetime' attribute in <time>
+    # Example: "2025-04-15T07:00:00"
+    todays_date = date.today()
+    booking_date = f"{todays_date.year}-{month_and_day[:2]}-{month_and_day[3:]}"
+
+    # Ensure month and day are zero-padded
     booking_date = datetime.strptime(booking_date, "%Y-%m-%d").strftime("%Y-%m-%d")
-    # Format 24-hour time
-    hour_24 = int(hour)
-    if ampm.upper() == "PM" and hour_24 != 12:
-        hour_24 += 12
-    if ampm.upper() == "AM" and hour_24 == 12:
-        hour_24 = 0
-    time_attr = f"{booking_date}T{hour_24:02}:00:00"
 
-    # Step 1: Wait for the tee time grid to load
-    tee_time_grid_xpath = "//div[contains(@class, 'teetimetable')]"
+    time_attr = f"{booking_date}T{int(hour):02}:{int(minute):02}:00"
+
+    # Wait for tee time component to appear
+    time_xpath = f"//time[@datetime='{time_attr}']"
+
+    print(f"Waiting for tee time to load: {time_attr}")
     try:
-        print("⏳ Waiting for tee time grid to load...")
-        wait.until(EC.presence_of_element_located((By.XPATH, tee_time_grid_xpath)))
-        print("✅ Tee time grid loaded.")
+        time_element = wait.until(EC.presence_of_element_located((By.XPATH, time_xpath)))
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", time_element)
+        driver.execute_script("arguments[0].click();", time_element)
+        print(f"✅ Time {tee_time} selected.")
     except TimeoutException:
-        print("❌ Tee time grid did not load in time.")
+        print(f"❌ Time {tee_time} not found on the page.")
         raise
-
-    # Step 2: Try clicking any "Show more" buttons (non-blocking)
-    try:
-        show_more_buttons = driver.find_elements(By.XPATH, "//span[contains(normalize-space(.), 'Show more')]/ancestor::button")
-        for button in show_more_buttons:
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-            driver.execute_script("arguments[0].click();", button)
-            print("✅ Clicked 'Show more' button.")
-            time.sleep(0.5)  # Give DOM a moment to expand
-    except Exception as e:
-        print(f"⚠️ Error while checking 'Show more' buttons: {e}")
-
-    # Step 3: Find the clickable parent of the desired time
-    clickable_parent_xpath = f"//time[@datetime='{time_attr}']/ancestor::div[contains(@class, 'teetimetableDateTime')]"
-    try:
-        print(f"⏳ Waiting for tee time: {time_attr}")
-        clickable_element = wait.until(EC.element_to_be_clickable((By.XPATH, clickable_parent_xpath)))
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", clickable_element)
-        driver.execute_script("arguments[0].click();", clickable_element)
-        print(f"✅ Tee time {tee_time} selected.")
-    except TimeoutException:
-        print(f"❌ Desired time {tee_time} not found or not clickable.")
-        raise
-
 def select_player(driver, wait):
     print("🎯 Starting player selection flow...")
 
@@ -431,7 +397,7 @@ def main():
         select_date(driver, wait)
         select_time(driver, wait)
         select_player(driver, wait)
-        finalize_booking(driver, wait)
+        #finalize_booking(driver, wait)
 
     except (TimeoutException, NoSuchElementException, ElementClickInterceptedException, UnexpectedAlertPresentException) as e:
         print("An error occurred during booking flow:", e)
