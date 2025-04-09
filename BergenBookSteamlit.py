@@ -453,7 +453,7 @@ if __name__ == '__main__':
     st.write('Fill in your booking details below:')
 
     user = st.text_input('User ID', '9094566')
-    password = st.text_input('Password', 'Cp4iJ30z', type='password')
+    password = st.text_input('Password', '', type='password')
     month_and_day = st.text_input('Date (MM/DD)', '04/16')
     player = st.selectbox('Number of Players', ['1', '2', '3', '4'])
     tee_time = st.text_input('Preferred Tee Time', '12:00 PM')
