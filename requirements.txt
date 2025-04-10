@@ -1,6 +1,7 @@
-streamlit
-undetected-chromedriver
-selenium
+undetected-chromedriver==3.5.5
 selenium-stealth
 pause
 webdriver-manager
+streamlit>=1.32.0
+selenium>=4.18.0
+setuptools>=68.0.0
