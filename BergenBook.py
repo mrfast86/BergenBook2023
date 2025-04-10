@@ -75,7 +75,11 @@ def setup_driver():
         elif system == "Darwin":
             chrome_options.binary_location = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
         elif system == "Linux":
-            chrome_options.binary_location = shutil.which("google-chrome") or shutil.which("chromium-browser")
+            binary_path = shutil.which("google-chrome") or shutil.which("chromium-browser")
+            if binary_path:
+                chrome_options.binary_location = binary_path
+            else:
+                log("⚠️ Warning: Could not find Chrome binary automatically.")
 
     driver = uc.Chrome(
         options=chrome_options,
