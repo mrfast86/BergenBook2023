@@ -25,5 +25,4 @@ ENV PATH=$PATH:/usr/bin/chromium
 EXPOSE $PORT
 
 # Start Streamlit — shell form to resolve $PORT ✅
-CMD streamlit run BergenBook.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.runOnSave false --logger.level info
-
+CMD streamlit run BergenBook.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.enableWatchdog false --server.runOnSave false
