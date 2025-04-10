@@ -65,27 +65,46 @@ def setup_driver():
     chrome_options.add_argument('--disable-infobars')
     chrome_options.add_argument('--disable-extensions')
 
+    import subprocess
+
     if "STREAMLIT_SERVER_ENABLED" in os.environ:
-        chrome_options.binary_location = "/usr/bin/chromium-browser"
+        # ✅ Streamlit Cloud environment
+        chrome_options.binary_location = "/usr/bin/chromium"
         chrome_options.add_argument('--headless')
+
+        # Optional: Check version for debugging
+        try:
+            version = subprocess.check_output(['/usr/bin/chromium', '--version']).decode().strip()
+            log(f"✅ Found Chromium version: {version}")
+        except Exception as e:
+            log(f"❌ Chromium not found or error getting version: {e}")
+
     else:
+        # ✅ Local development environment
         system = platform.system()
         if system == "Windows":
             chrome_options.binary_location = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-        elif system == "Darwin":
+        elif system == "Darwin":  # macOS
             chrome_options.binary_location = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
         elif system == "Linux":
-            binary_path = shutil.which("google-chrome") or shutil.which("chromium-browser")
+            binary_path = shutil.which("google-chrome") or shutil.which("chromium-browser") or shutil.which("chromium")
             if binary_path:
                 chrome_options.binary_location = binary_path
+                try:
+                    version = subprocess.check_output([binary_path, '--version']).decode().strip()
+                    log(f"✅ Found Chrome/Chromium version: {version}")
+                except Exception as e:
+                    log(f"⚠️ Error getting Chrome version: {e}")
             else:
-                log("⚠️ Warning: Could not find Chrome binary automatically.")
+                log("⚠️ Chrome binary not found on Linux. Make sure Chrome or Chromium is installed.")
 
+    # ✅ Create driver
     driver = uc.Chrome(
         options=chrome_options,
         driver_executable_path=ChromeDriverManager().install()
     )
 
+    # ✅ Apply stealth mode
     stealth(driver,
         languages=["en-US", "en"],
         vendor="Google Inc.",
