@@ -14,6 +14,7 @@ import os
 import platform
 import shutil
 import base64
+import os
 import pause
 
 # --- STREAMLIT LOGGING SETUP ---
@@ -558,6 +559,7 @@ def main():
             driver.__del__ = lambda: None
 
 if __name__ == '__main__':
+    os.environ["STREAMLIT_SERVER_RUN_ON_SAVE"] = "false"
     st.title('🏌️ Bergen Golf Book Tee Time')
     st.write('Fill in your booking details below:')
 
