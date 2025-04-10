@@ -60,16 +60,12 @@ preferred_courses = [
 # --- DRIVER SETUP ---
 def setup_driver():
     chrome_options = Options()
-    chrome_options.add_argument('--remote-debugging-port=9222')
+    chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--disable-software-rasterizer')
-    chrome_options.add_argument('--disable-setuid-sandbox')
-    chrome_options.add_argument('--disable-extensions')
-    chrome_options.add_argument('--disable-background-networking')
-    chrome_options.add_argument('--disable-sync')
-    chrome_options.add_argument('--metrics-recording-only')
-    chrome_options.add_argument('--disable-default-apps')
-    chrome_options.add_argument('--no-first-run')
-    chrome_options.add_argument('--disable-translate')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-features=NetworkService')
+    chrome_options.add_argument('--disable-features=VizDisplayCompositor')
 
     import subprocess
 
@@ -532,9 +528,12 @@ def finalize_booking(driver, wait):
 
 # --- MAIN EXECUTION ---
 def main():
+    log("✅ Starting main() function...")
     driver, wait = setup_driver()
+    log("✅ Driver and wait object created.")
 
     try:
+        log("🚀 Starting login flow...")
         login(driver, wait)
 
         if not wait_until_booking(driver, wait):

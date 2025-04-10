@@ -38,10 +38,12 @@ preferred_courses = [
 
 def setup_driver():
     chrome_options = Options()
-    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--disable-software-rasterizer')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--headless=new')
+    chrome_options.add_argument('--disable-features=NetworkService')
+    chrome_options.add_argument('--disable-features=VizDisplayCompositor')
     chrome_options.binary_location = '/usr/bin/chromium'  # Notice: correct path in Streamlit Cloud
 
     driver = uc.Chrome(
@@ -427,9 +429,12 @@ def finalize_booking(driver, wait):
 
 # --- MAIN EXECUTION ---
 def main():
+    log("✅ Starting main() function...")
     driver, wait = setup_driver()
+    log("✅ Driver and wait object created.")
 
     try:
+        log("🚀 Starting login flow...")
         login(driver, wait)
 
         if not wait_until_booking(driver, wait):
