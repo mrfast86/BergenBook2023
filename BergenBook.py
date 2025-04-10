@@ -7,7 +7,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException,
 from selenium_stealth import stealth
 from datetime import datetime, date, timedelta
 import time
-import streamlit as st
+
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 import os
@@ -17,6 +17,8 @@ import base64
 import os
 import pause
 
+os.environ["STREAMLIT_SERVER_RUN_ON_SAVE"] = "false"
+import streamlit as st
 # --- STREAMLIT LOGGING SETUP ---
 log_lines = []  # For download button later
 
@@ -559,7 +561,6 @@ def main():
             driver.__del__ = lambda: None
 
 if __name__ == '__main__':
-    os.environ["STREAMLIT_SERVER_RUN_ON_SAVE"] = "false"
     st.title('🏌️ Bergen Golf Book Tee Time')
     st.write('Fill in your booking details below:')
 
