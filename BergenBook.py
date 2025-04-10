@@ -101,10 +101,12 @@ def setup_driver():
                 log("⚠️ Chrome binary not found on Linux. Make sure Chrome or Chromium is installed.")
 
     # ✅ Create driver
+    log("✅ Initializing Chrome driver...")
     driver = uc.Chrome(
         options=chrome_options,
         driver_executable_path=ChromeDriverManager().install()
     )
+    log("✅ Chrome driver initialized successfully.")
 
     # ✅ Apply stealth mode
     stealth(driver,
