@@ -399,7 +399,8 @@ def select_time(driver, wait):
 
     # Collect all available slots with their datetime values
     all_time_els = driver.find_elements(By.XPATH, "//time[@datetime]")
-    candidates = []  # (abs_delta_seconds, datetime_obj, ancestor_div, course_priority)
+    requested_players = int(player)
+    candidates = []
     for tel in all_time_els:
         dt_str = tel.get_attribute("datetime")
         try:
@@ -413,19 +414,34 @@ def select_time(driver, wait):
                 "ancestor::div[contains(@class,'teetimetableDateTime')]")
         except NoSuchElementException:
             continue
+
+        slot_text = ""
+        try:
+            slot_text = ancestor.text
+        except Exception:
+            pass
+
+        # Detect max available players from slot text (e.g. "4 Players" or "2 spots")
+        import re as _re
+        avail_players = requested_players  # assume enough if we can't detect
+        m = _re.search(r'\b([1-4])\s*(?:player|spot|golfer)', slot_text, _re.IGNORECASE)
+        if m:
+            avail_players = int(m.group(1))
+
+        # Skip slots that can't fit the requested group size
+        if avail_players < requested_players:
+            log(f"⏭️  Skipping {slot_dt.strftime('%I:%M %p').lstrip('0')} — only {avail_players} spot(s) available")
+            continue
+
         delta = abs((slot_dt - target_dt).total_seconds())
-        # Course priority: index in desired_courses (lower = better); None if no match
         priority = len(desired_courses)  # worst priority by default
         if desired_courses:
-            slot_text = ""
-            try:
-                slot_text = ancestor.text.lower()
-            except Exception:
-                pass
+            slot_text_lower = slot_text.lower()
             for i, cname in enumerate(desired_courses):
-                if cname.lower() in slot_text:
+                if cname.lower() in slot_text_lower:
                     priority = i
                     break
+        log(f"   Found slot {slot_dt.strftime('%I:%M %p').lstrip('0')} | course_priority={priority} | text={slot_text[:60].strip()!r}")
         candidates.append((priority, delta, slot_dt, ancestor))
 
     if not candidates:
@@ -455,14 +471,46 @@ def select_player(driver, wait):
     driver.execute_script("arguments[0].click();", edit)
     wait.until(EC.presence_of_element_located((By.CLASS_NAME, "mat-bottom-sheet-container")))
 
-    # Match the toggle button whose label text exactly equals the player count
+    # Find all available player toggle buttons and pick best match
+    all_btns_xpath = (
+        "//mat-bottom-sheet-container"
+        "//button[contains(@class,'mat-button-toggle-button')]"
+        "[.//span[normalize-space(text()) >= '1' and normalize-space(text()) <= '4']]"
+    )
+    wait.until(EC.presence_of_element_located((By.XPATH, all_btns_xpath)))
+    avail_btns = driver.find_elements(By.XPATH, all_btns_xpath)
+    avail_counts = []
+    for b in avail_btns:
+        try:
+            label = b.find_element(By.XPATH, ".//span").text.strip()
+            if label.isdigit():
+                avail_counts.append((int(label), b))
+        except Exception:
+            pass
+
+    avail_counts.sort(key=lambda x: x[0])
+    log(f"   Available player options: {[c for c, _ in avail_counts]}")
+
+    requested = int(player)
+    chosen_count, btn_to_click = avail_counts[-1]  # default to max available
+    for cnt, btn in avail_counts:
+        if cnt == requested:
+            chosen_count, btn_to_click = cnt, btn
+            break
+
+    if chosen_count != requested:
+        log(f"⚠️  Requested {requested} players but only {chosen_count} available — booking {chosen_count}.")
+    else:
+        log(f"✅  Selecting {chosen_count} player(s).")
+
+    driver.execute_script("arguments[0].click();", btn_to_click)
+
+    # Confirm aria-pressed is set
     btn_xpath = (
         f"//mat-bottom-sheet-container"
         f"//button[contains(@class,'mat-button-toggle-button')]"
-        f"[.//span[normalize-space(text())='{player}']]"
+        f"[.//span[normalize-space(text())='{chosen_count}']]"
     )
-    wait.until(EC.presence_of_element_located((By.XPATH, btn_xpath)))
-    driver.execute_script("arguments[0].click();", wait.until(EC.element_to_be_clickable((By.XPATH, btn_xpath))))
 
     elapsed = 0
     while elapsed < 10:
@@ -542,7 +590,11 @@ def main():
         clear_overlays(driver, wait)
         select_time(driver, wait)
         select_player(driver, wait)
-        finalize_booking(driver, wait)
+        if os.environ.get("DRY_RUN"):
+            log("🧪  DRY RUN — skipping finalize. Inspect the browser, then close it.")
+            pause.minutes(2)
+        else:
+            finalize_booking(driver, wait)
         _booking_result["success"] = True
     except Exception as e:
         log(f"❌  {e}")
