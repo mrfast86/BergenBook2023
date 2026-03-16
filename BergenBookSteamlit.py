@@ -328,17 +328,50 @@ def wait_until_booking(driver, wait):
             )))
             driver.execute_script("arguments[0].click();", dropdown)
 
-            deselect = wait.until(EC.element_to_be_clickable((By.XPATH,
-                "//span[contains(@class,'mat-option-text') and normalize-space(text())='Deselect All']"
-            )))
-            driver.execute_script("arguments[0].click();", deselect)
+            # Wait for the options panel to render
+            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "mat-option")))
+            time.sleep(0.3)
 
+            # Read all available options and log them so we know the real names
+            all_opts = driver.find_elements(By.CLASS_NAME, "mat-option")
+            opt_texts = []
+            for o in all_opts:
+                try:
+                    opt_texts.append(o.text.strip())
+                except Exception:
+                    pass
+            log(f"📋  Course options found: {opt_texts}")
+
+            # Deselect All — match by contains to handle whitespace variants
+            deselect_candidates = [o for o in all_opts if 'deselect' in o.text.strip().lower()]
+            if deselect_candidates:
+                driver.execute_script("arguments[0].click();", deselect_candidates[0])
+                time.sleep(0.3)
+                log("✅  Deselected all courses.")
+            else:
+                log("⚠️  'Deselect All' option not found — proceeding without deselect.")
+
+            import re as _re2
             for cname in desired_courses:
-                course_opt = wait.until(EC.element_to_be_clickable((By.XPATH,
-                    f"//span[contains(@class,'mat-option-text') and normalize-space(text())='{cname}']"
-                )))
-                driver.execute_script("arguments[0].click();", course_opt)
-                log(f"✅  Course '{cname}' added.")
+                # Build base name (strip hole/variant suffix) for flexible matching
+                base_m = _re2.match(r'^([A-Za-z ]+?)(?:\s+(?:\d|Back|R/W|Blue)\b)', cname)
+                base = base_m.group(1).strip().lower() if base_m else cname.lower()
+
+                matched = None
+                for o in driver.find_elements(By.CLASS_NAME, "mat-option"):
+                    otext = o.text.strip()
+                    if not otext or 'deselect' in otext.lower() or 'select all' in otext.lower():
+                        continue
+                    if base in otext.lower() or cname.lower() in otext.lower():
+                        matched = o
+                        log(f"✅  Matched '{cname}' → '{otext}'")
+                        break
+
+                if matched:
+                    driver.execute_script("arguments[0].click();", matched)
+                    time.sleep(0.2)
+                else:
+                    log(f"⚠️  No option found matching '{cname}' (base: '{base}')")
 
             done_btn = wait.until(EC.element_to_be_clickable((By.XPATH,
                 "//button[.//span[normalize-space(text())='Done']]"
