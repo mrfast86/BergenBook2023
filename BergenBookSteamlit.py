@@ -438,7 +438,10 @@ def select_time(driver, wait):
         if desired_courses:
             slot_text_lower = slot_text.lower()
             for i, cname in enumerate(desired_courses):
-                if cname.lower() in slot_text_lower:
+                # Extract base location name: words before any digit/Back/R/W/Blue suffix
+                base = _re.match(r'^([A-Za-z ]+?)(?:\s+(?:\d|Back|R/W|Blue)\b)', cname)
+                search_name = base.group(1).strip().lower() if base else cname.lower()
+                if search_name in slot_text_lower or cname.lower() in slot_text_lower:
                     priority = i
                     break
         log(f"   Found slot {slot_dt.strftime('%I:%M %p').lstrip('0')} | course_priority={priority} | text={slot_text[:60].strip()!r}")
