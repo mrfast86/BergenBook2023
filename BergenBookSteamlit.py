@@ -325,29 +325,9 @@ def wait_until_booking(driver, wait):
     log("🔄  Page refreshed — selecting course...")
 
     try:
-        # Aggressively clear all dialogs/backdrops before touching the filter
-        log("🧹  Clearing any open dialogs...")
+        log("🧹  Clearing dialogs before course selection...")
         clear_overlays(driver, wait)
-
-        # Extra: close any remaining mat-dialog by clicking outside or its close button
-        for _ in range(3):
-            try:
-                close_btn = driver.find_element(By.CSS_SELECTOR,
-                    "mat-dialog-container button, mat-dialog-container [mat-dialog-close]")
-                driver.execute_script("arguments[0].click();", close_btn)
-                log("🧹  Closed lingering dialog.")
-                time.sleep(0.5)
-            except Exception:
-                break
-
-        # Wait until no backdrop is present
-        try:
-            WebDriverWait(driver, 8).until(
-                EC.invisibility_of_element_located((By.CLASS_NAME, "cdk-overlay-backdrop"))
-            )
-            log("✅  No backdrops — page is clear.")
-        except Exception:
-            log("⚠️  Backdrop may still be present — proceeding anyway.")
+        log("✅  Page clear — proceeding.")
 
         if desired_courses:
             log("🎯  Opening course dropdown...")
