@@ -239,11 +239,16 @@ def dismiss_popup(driver, wait):
             EC.element_to_be_clickable((By.CSS_SELECTOR, "mat-dialog-container button[mat-dialog-close]"))
         )
         try:
-            content = driver.find_element(By.CSS_SELECTOR, "mat-dialog-content").text
-            log(f"[Dialog] {content[:80].strip()}…")
+            # Get only paragraph/span text, skip icon names like "arrow_back"
+            parts = driver.find_elements(By.CSS_SELECTOR, "mat-dialog-content p, mat-dialog-content span:not(.mat-icon)")
+            content = " ".join(p.text.strip() for p in parts if p.text.strip())
+            if not content:
+                content = driver.find_element(By.CSS_SELECTOR, "mat-dialog-content").text
+            log(f"[Dialog] {content[:100].strip()}")
         except NoSuchElementException:
             pass
         driver.execute_script("arguments[0].click();", close_btn)
+        time.sleep(0.4)
     except Exception:
         pass
 
@@ -320,12 +325,36 @@ def wait_until_booking(driver, wait):
     log("🔄  Page refreshed — selecting course...")
 
     try:
+        # Aggressively clear all dialogs/backdrops before touching the filter
+        log("🧹  Clearing any open dialogs...")
         clear_overlays(driver, wait)
 
+        # Extra: close any remaining mat-dialog by clicking outside or its close button
+        for _ in range(3):
+            try:
+                close_btn = driver.find_element(By.CSS_SELECTOR,
+                    "mat-dialog-container button, mat-dialog-container [mat-dialog-close]")
+                driver.execute_script("arguments[0].click();", close_btn)
+                log("🧹  Closed lingering dialog.")
+                time.sleep(0.5)
+            except Exception:
+                break
+
+        # Wait until no backdrop is present
+        try:
+            WebDriverWait(driver, 8).until(
+                EC.invisibility_of_element_located((By.CLASS_NAME, "cdk-overlay-backdrop"))
+            )
+            log("✅  No backdrops — page is clear.")
+        except Exception:
+            log("⚠️  Backdrop may still be present — proceeding anyway.")
+
         if desired_courses:
+            log("🎯  Opening course dropdown...")
             dropdown = wait.until(EC.element_to_be_clickable((By.XPATH,
                 "//mat-select[@name='course']"
             )))
+            log("✅  Course dropdown found — clicking...")
             driver.execute_script("arguments[0].click();", dropdown)
 
             # Wait for the options panel to render
