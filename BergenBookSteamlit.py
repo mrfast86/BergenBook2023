@@ -269,10 +269,14 @@ def clear_overlays(driver, wait):
 def login(driver, wait):
     log("🌐  Opening booking page...")
     driver.get('https://bergencountygolf.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23')
+    # Dismiss any startup dialogs (e.g. surcharge notice), then find Sign In button
     dismiss_popup(driver, wait)
-    wait.until(EC.presence_of_element_located((By.TAG_NAME, 'mat-dialog-container')))
+    log("🔐  Looking for Sign In button...")
+    sign_in = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Sign In')]")))
     log("🔐  Signing in...")
-    wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Sign In')]"))).click()
+    driver.execute_script("arguments[0].click();", sign_in)
+    # Wait for the login dialog to appear
+    wait.until(EC.presence_of_element_located((By.TAG_NAME, 'mat-dialog-container')))
     wait.until(EC.presence_of_element_located((By.NAME, 'username'))).send_keys(user)
     wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))).click()
     pwd_field = wait.until(EC.element_to_be_clickable((By.ID, 'mat-input-2')))
