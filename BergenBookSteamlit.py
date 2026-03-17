@@ -346,16 +346,27 @@ def wait_until_booking(driver, wait):
             deselect_candidates = [o for o in all_opts if 'deselect' in o.text.strip().lower()]
             if deselect_candidates:
                 driver.execute_script("arguments[0].click();", deselect_candidates[0])
-                time.sleep(0.3)
+                time.sleep(0.4)
                 log("✅  Deselected all courses.")
             else:
                 log("⚠️  'Deselect All' option not found — proceeding without deselect.")
+
+            # Verify all are deselected (aria-selected should be false/absent)
+            post_desel = driver.find_elements(By.CLASS_NAME, "mat-option")
+            still_selected = [o.text.strip() for o in post_desel
+                              if o.get_attribute("aria-selected") == "true"
+                              and 'deselect' not in o.text.lower()]
+            if still_selected:
+                log(f"⚠️  Still selected after deselect: {still_selected}")
+            else:
+                log("✅  All options confirmed deselected.")
 
             import re as _re2
             for cname in desired_courses:
                 # Build base name (strip hole/variant suffix) for flexible matching
                 base_m = _re2.match(r'^([A-Za-z ]+?)(?:\s+(?:\d|Back|R/W|Blue)\b)', cname)
                 base = base_m.group(1).strip().lower() if base_m else cname.lower()
+                log(f"🔍  Looking for course '{cname}' (base: '{base}')...")
 
                 matched = None
                 for o in driver.find_elements(By.CLASS_NAME, "mat-option"):
@@ -364,21 +375,43 @@ def wait_until_booking(driver, wait):
                         continue
                     if base in otext.lower() or cname.lower() in otext.lower():
                         matched = o
-                        log(f"✅  Matched '{cname}' → '{otext}'")
+                        log(f"   → Matched option text: '{otext}'")
                         break
 
                 if matched:
                     driver.execute_script("arguments[0].click();", matched)
-                    time.sleep(0.2)
+                    time.sleep(0.3)
+                    # Verify it's now selected
+                    is_sel = matched.get_attribute("aria-selected")
+                    log(f"   → aria-selected after click: {is_sel}")
+                    if is_sel != "true":
+                        log(f"⚠️  Click may not have registered for '{cname}' — retrying...")
+                        driver.execute_script("arguments[0].click();", matched)
+                        time.sleep(0.3)
                 else:
-                    log(f"⚠️  No option found matching '{cname}' (base: '{base}')")
+                    log(f"❌  No option found matching '{cname}' (base: '{base}') — skipping.")
+
+            # Log final selection state before closing
+            final_opts = driver.find_elements(By.CLASS_NAME, "mat-option")
+            selected_names = [o.text.strip() for o in final_opts
+                              if o.get_attribute("aria-selected") == "true"]
+            log(f"📌  Final selected courses: {selected_names}")
 
             done_btn = wait.until(EC.element_to_be_clickable((By.XPATH,
                 "//button[.//span[normalize-space(text())='Done']]"
             )))
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", done_btn)
             driver.execute_script("arguments[0].click();", done_btn)
+            time.sleep(0.3)
             clear_overlays(driver, wait)
+
+            # Confirm the dropdown trigger text reflects the selection
+            try:
+                trigger_text = driver.find_element(By.CSS_SELECTOR,
+                    "mat-select[name='course'] .mat-select-value-text").text.strip()
+                log(f"✅  Course dropdown now shows: '{trigger_text}'")
+            except Exception:
+                pass
         else:
             log("ℹ️   Searching across all courses.")
 
@@ -775,7 +808,14 @@ if __name__ == '__main__':
 
     # ── RIGHT: LOG PANEL ──────────────────────────────────────────────────────
     with right:
-        st.markdown("### Live Process")
+        log_hdr_col, clear_col = st.columns([3, 1])
+        with log_hdr_col:
+            st.markdown("### Live Process")
+        with clear_col:
+            st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+            if st.button("🗑 Clear", disabled=st.session_state.running):
+                st.session_state.logs = []
+                st.rerun()
 
         status_ph = st.empty()
         log_ph    = st.empty()
