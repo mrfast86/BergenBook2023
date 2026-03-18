@@ -165,6 +165,7 @@ player = '4'
 tee_time = '12:00 PM'
 tee_range = 30         # minutes ± to search around tee_time
 desired_courses = []   # ordered list — index 0 = highest priority
+dry_run = False
 
 COURSES = [
     "Rockleigh R/W 18", "Darlington 18", "Overpeck 18",
@@ -269,14 +270,13 @@ def clear_overlays(driver, wait):
 def login(driver, wait):
     log("🌐  Opening booking page...")
     driver.get('https://bergencountygolf.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23')
-    # Dismiss any startup dialogs (e.g. surcharge notice), then find Sign In button
+    # Dismiss any startup dialogs (e.g. surcharge notice)
     dismiss_popup(driver, wait)
     log("🔐  Looking for Sign In button...")
     sign_in = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Sign In')]")))
-    log("🔐  Signing in...")
+    log("🔐  Clicking Sign In...")
     driver.execute_script("arguments[0].click();", sign_in)
-    # Wait for the login dialog to appear
-    wait.until(EC.presence_of_element_located((By.TAG_NAME, 'mat-dialog-container')))
+    log("🔐  Waiting for username field...")
     wait.until(EC.presence_of_element_located((By.NAME, 'username'))).send_keys(user)
     wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))).click()
     pwd_field = wait.until(EC.element_to_be_clickable((By.ID, 'mat-input-2')))
@@ -290,6 +290,132 @@ def login(driver, wait):
     log("✅  Logged in.")
     clear_overlays(driver, wait)
 
+# ─── COURSE SELECTION ─────────────────────────────────────────────────────────
+def select_courses(driver, wait):
+    """Select desired_courses in the site's course filter dropdown."""
+    if not desired_courses:
+        log("ℹ️   Searching across all courses.")
+        return
+
+    import re as _re2
+
+    log("🎯  Opening course dropdown...")
+    dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "//mat-select[@name='course']")))
+    log("✅  Course dropdown found — clicking...")
+    driver.execute_script("arguments[0].click();", dropdown)
+
+    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "mat-option")))
+    time.sleep(0.3)
+
+    all_opts = driver.find_elements(By.CLASS_NAME, "mat-option")
+    opt_texts = [o.text.strip() for o in all_opts if o.text.strip()]
+    log(f"📋  Course options found: {opt_texts}")
+
+    # Deselect All first
+    deselect_candidates = [o for o in all_opts if 'deselect' in o.text.strip().lower()]
+    if deselect_candidates:
+        driver.execute_script("arguments[0].click();", deselect_candidates[0])
+        time.sleep(0.4)
+        log("✅  Deselected all courses.")
+    else:
+        log("⚠️  'Deselect All' option not found — proceeding without deselect.")
+
+    post_desel = driver.find_elements(By.CLASS_NAME, "mat-option")
+    still_selected = [o.text.strip() for o in post_desel
+                      if o.get_attribute("aria-selected") == "true"
+                      and 'deselect' not in o.text.lower()]
+    if still_selected:
+        log(f"⚠️  Still selected after deselect: {still_selected}")
+    else:
+        log("✅  All options confirmed deselected.")
+
+    for cname in desired_courses:
+        log(f"🔍  Looking for course '{cname}'...")
+        current_opts = driver.find_elements(By.CLASS_NAME, "mat-option")
+        matched = None
+
+        # Pass 1: exact match (case-insensitive)
+        for o in current_opts:
+            otext = o.text.strip()
+            if not otext or 'deselect' in otext.lower() or 'select all' in otext.lower():
+                continue
+            if otext.lower() == cname.lower():
+                matched = o
+                log(f"   → Exact match: '{otext}'")
+                break
+
+        # Pass 2: site option contains our full name
+        if not matched:
+            for o in current_opts:
+                otext = o.text.strip()
+                if not otext or 'deselect' in otext.lower() or 'select all' in otext.lower():
+                    continue
+                if cname.lower() in otext.lower():
+                    matched = o
+                    log(f"   → Contains match: '{otext}'")
+                    break
+
+        # Pass 3: our full name contains the site option text (e.g. site says "Darlington", we have "Darlington 18")
+        if not matched:
+            for o in current_opts:
+                otext = o.text.strip()
+                if not otext or 'deselect' in otext.lower() or 'select all' in otext.lower():
+                    continue
+                if otext.lower() in cname.lower() and len(otext) > 3:
+                    matched = o
+                    log(f"   → Substring match: '{otext}'")
+                    break
+
+        if matched:
+            driver.execute_script("arguments[0].click();", matched)
+            time.sleep(0.3)
+            is_sel = matched.get_attribute("aria-selected")
+            log(f"   → aria-selected after click: {is_sel}")
+            if is_sel != "true":
+                log(f"⚠️  Retrying click for '{cname}'...")
+                driver.execute_script("arguments[0].click();", matched)
+                time.sleep(0.3)
+        else:
+            log(f"❌  No option found matching '{cname}' — skipping.")
+
+    final_opts = driver.find_elements(By.CLASS_NAME, "mat-option")
+    selected_names = [o.text.strip() for o in final_opts
+                      if o.get_attribute("aria-selected") == "true"]
+    log(f"📌  Final selected courses: {selected_names}")
+
+    done_btn = wait.until(EC.element_to_be_clickable((By.XPATH,
+        "//button[.//span[normalize-space(text())='Done']]"
+    )))
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", done_btn)
+    driver.execute_script("arguments[0].click();", done_btn)
+    time.sleep(0.3)
+    clear_overlays(driver, wait)
+
+    try:
+        trigger_text = driver.find_element(By.CSS_SELECTOR,
+            "mat-select[name='course'] .mat-select-value-text").text.strip()
+        log(f"✅  Course dropdown now shows: '{trigger_text}'")
+    except Exception:
+        pass
+
+# ─── PLAYER FILTER (search page toggle) ──────────────────────────────────────
+def select_player_filter(driver, wait):
+    log(f"👥  Setting player filter to {player}...")
+    btn_xpath = (
+        f"//mat-button-toggle-group[.//mat-button-toggle[@value='number']]"
+        f"//button[.//span[normalize-space(text())='{player}']]"
+    )
+    btn = wait.until(EC.element_to_be_clickable((By.XPATH, btn_xpath)))
+    driver.execute_script("arguments[0].click();", btn)
+    # Verify aria-pressed flipped to true
+    elapsed = 0
+    while elapsed < 5:
+        if btn.get_attribute("aria-pressed") == "true":
+            log(f"✅  Player filter set to {player}.")
+            return
+        time.sleep(0.2); elapsed += 0.2
+    log(f"⚠️  Player filter click may not have registered for {player}.")
+
 # ─── WAIT UNTIL BOOKING ───────────────────────────────────────────────────────
 def wait_until_booking(driver, wait):
     today = date.today()
@@ -302,137 +428,28 @@ def wait_until_booking(driver, wait):
     BOOKING_URL = 'https://bergencountygolf.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23'
 
     if booking_time < datetime.now():
-        log("⚠️   Booking window already open — refreshing page...")
-        driver.get(BOOKING_URL)
-        clear_overlays(driver, wait)
-        return False
-
-    while True:
-        seconds_left = (booking_time - datetime.now()).total_seconds()
-        dismiss_popup(driver, wait)
-        if seconds_left <= 10:
-            log("⏱️   Final countdown — locking in...")
-            break
-        elif seconds_left > 300:
-            mins = int(seconds_left // 60)
-            log(f"⏳  {mins} min until booking opens...")
-            time.sleep(60)
-        else:
-            log(f"⏳  {int(seconds_left)}s remaining...")
-            time.sleep(5)
-
-    while datetime.now() < booking_time:
-        time.sleep(0.05)
-
-    log("🚀  Booking window reached — refreshing page...")
-    driver.get(BOOKING_URL)
-    log("🔄  Page refreshed — selecting course...")
-
-    try:
-        log("🧹  Clearing dialogs before course selection...")
-        clear_overlays(driver, wait)
-        log("✅  Page clear — proceeding.")
-
-        if desired_courses:
-            log("🎯  Opening course dropdown...")
-            dropdown = wait.until(EC.element_to_be_clickable((By.XPATH,
-                "//mat-select[@name='course']"
-            )))
-            log("✅  Course dropdown found — clicking...")
-            driver.execute_script("arguments[0].click();", dropdown)
-
-            # Wait for the options panel to render
-            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "mat-option")))
-            time.sleep(0.3)
-
-            # Read all available options and log them so we know the real names
-            all_opts = driver.find_elements(By.CLASS_NAME, "mat-option")
-            opt_texts = []
-            for o in all_opts:
-                try:
-                    opt_texts.append(o.text.strip())
-                except Exception:
-                    pass
-            log(f"📋  Course options found: {opt_texts}")
-
-            # Deselect All — match by contains to handle whitespace variants
-            deselect_candidates = [o for o in all_opts if 'deselect' in o.text.strip().lower()]
-            if deselect_candidates:
-                driver.execute_script("arguments[0].click();", deselect_candidates[0])
-                time.sleep(0.4)
-                log("✅  Deselected all courses.")
+        log("⚠️   Booking window already open — proceeding without refresh...")
+    else:
+        while True:
+            seconds_left = (booking_time - datetime.now()).total_seconds()
+            dismiss_popup(driver, wait)
+            if seconds_left <= 10:
+                log("⏱️   Final countdown — locking in...")
+                break
+            elif seconds_left > 300:
+                mins = int(seconds_left // 60)
+                log(f"⏳  {mins} min until booking opens...")
+                time.sleep(60)
             else:
-                log("⚠️  'Deselect All' option not found — proceeding without deselect.")
+                log(f"⏳  {int(seconds_left)}s remaining...")
+                time.sleep(5)
 
-            # Verify all are deselected (aria-selected should be false/absent)
-            post_desel = driver.find_elements(By.CLASS_NAME, "mat-option")
-            still_selected = [o.text.strip() for o in post_desel
-                              if o.get_attribute("aria-selected") == "true"
-                              and 'deselect' not in o.text.lower()]
-            if still_selected:
-                log(f"⚠️  Still selected after deselect: {still_selected}")
-            else:
-                log("✅  All options confirmed deselected.")
+        while datetime.now() < booking_time:
+            time.sleep(0.05)
 
-            import re as _re2
-            for cname in desired_courses:
-                # Build base name (strip hole/variant suffix) for flexible matching
-                base_m = _re2.match(r'^([A-Za-z ]+?)(?:\s+(?:\d|Back|R/W|Blue)\b)', cname)
-                base = base_m.group(1).strip().lower() if base_m else cname.lower()
-                log(f"🔍  Looking for course '{cname}' (base: '{base}')...")
+        log("🚀  Booking window reached — force-clicking date (no refresh)...")
 
-                matched = None
-                for o in driver.find_elements(By.CLASS_NAME, "mat-option"):
-                    otext = o.text.strip()
-                    if not otext or 'deselect' in otext.lower() or 'select all' in otext.lower():
-                        continue
-                    if base in otext.lower() or cname.lower() in otext.lower():
-                        matched = o
-                        log(f"   → Matched option text: '{otext}'")
-                        break
-
-                if matched:
-                    driver.execute_script("arguments[0].click();", matched)
-                    time.sleep(0.3)
-                    # Verify it's now selected
-                    is_sel = matched.get_attribute("aria-selected")
-                    log(f"   → aria-selected after click: {is_sel}")
-                    if is_sel != "true":
-                        log(f"⚠️  Click may not have registered for '{cname}' — retrying...")
-                        driver.execute_script("arguments[0].click();", matched)
-                        time.sleep(0.3)
-                else:
-                    log(f"❌  No option found matching '{cname}' (base: '{base}') — skipping.")
-
-            # Log final selection state before closing
-            final_opts = driver.find_elements(By.CLASS_NAME, "mat-option")
-            selected_names = [o.text.strip() for o in final_opts
-                              if o.get_attribute("aria-selected") == "true"]
-            log(f"📌  Final selected courses: {selected_names}")
-
-            done_btn = wait.until(EC.element_to_be_clickable((By.XPATH,
-                "//button[.//span[normalize-space(text())='Done']]"
-            )))
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", done_btn)
-            driver.execute_script("arguments[0].click();", done_btn)
-            time.sleep(0.3)
-            clear_overlays(driver, wait)
-
-            # Confirm the dropdown trigger text reflects the selection
-            try:
-                trigger_text = driver.find_element(By.CSS_SELECTOR,
-                    "mat-select[name='course'] .mat-select-value-text").text.strip()
-                log(f"✅  Course dropdown now shows: '{trigger_text}'")
-            except Exception:
-                pass
-        else:
-            log("ℹ️   Searching across all courses.")
-
-        return True
-
-    except TimeoutException as e:
-        log(f"❌  Course selection failed: {e}")
-        return False
+    return True
 
 # ─── SELECT DATE ──────────────────────────────────────────────────────────────
 def select_date(driver, wait):
@@ -441,15 +458,30 @@ def select_date(driver, wait):
     wait.until(EC.presence_of_element_located((By.CLASS_NAME, "day-background-upper")))
     xpath = f"//span[contains(@class,'day-background-upper') and text()='{day}']"
     try:
-        el = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
-        el.click()
-    except ElementClickInterceptedException:
         el = driver.find_element(By.XPATH, xpath)
-        driver.execute_script("arguments[0].click();", el)
-    except TimeoutException:
+    except NoSuchElementException:
         log(f"❌  Date {month_and_day} not found on calendar.")
         raise
-    log("✅  Date selected.")
+    # Strip disabled state and force-click via JS to bypass Angular's enabled check
+    driver.execute_script("""
+        var el = arguments[0];
+        el.removeAttribute('disabled');
+        el.classList.remove('day-background-disabled', 'mat-calendar-body-disabled');
+        var ancestor = el.closest('[disabled], .mat-calendar-body-disabled');
+        if (ancestor) {
+            ancestor.removeAttribute('disabled');
+            ancestor.classList.remove('mat-calendar-body-disabled');
+        }
+    """, el)
+    driver.execute_script("arguments[0].click();", el)
+    log("✅  Date clicked (force) — waiting for tee time grid...")
+    try:
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'teetimetable')]"))
+        )
+        log("✅  Tee time grid loaded — force click worked.")
+    except TimeoutException:
+        log("⚠️  Tee time grid did not appear — force click may have been ignored by Angular.")
 
 # ─── SELECT TIME ──────────────────────────────────────────────────────────────
 def select_time(driver, wait):
@@ -666,13 +698,15 @@ def main():
         return
     try:
         login(driver, wait)
+        select_courses(driver, wait)
+        select_player_filter(driver, wait)
         wait_until_booking(driver, wait)
         clear_overlays(driver, wait)
         select_date(driver, wait)
         clear_overlays(driver, wait)
         select_time(driver, wait)
         select_player(driver, wait)
-        if os.environ.get("DRY_RUN"):
+        if dry_run or os.environ.get("DRY_RUN"):
             log("🧪  DRY RUN — skipping finalize. Inspect the browser, then close it.")
             pause.minutes(2)
         else:
@@ -691,9 +725,15 @@ def main():
 if __name__ == '__main__':
 
     # Session state
-    for key, val in [('logs', []), ('running', False), ('status', 'idle'), ('errors', {})]:
+    for key, val in [('logs', []), ('running', False), ('status', 'idle'), ('errors', {}), ('booking_thread', None)]:
         if key not in st.session_state:
             st.session_state[key] = val
+
+    # Auto-reset running if the thread is no longer alive
+    if st.session_state.running:
+        t = st.session_state.booking_thread
+        if t is None or not t.is_alive():
+            st.session_state.running = False
 
     def ferr(field):
         """Render an inline error message for a field if one exists."""
@@ -816,6 +856,12 @@ if __name__ == '__main__':
                 unsafe_allow_html=True
             )
 
+        dry_run_in = st.checkbox(
+            "Dry Run (skip final booking step)",
+            value=False,
+            help="Logs in, selects the tee time and players, then stops before confirming — so you can verify everything looks right."
+        )
+
         st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
         run_btn = st.button("🚀 Start Booking", disabled=st.session_state.running)
 
@@ -874,7 +920,8 @@ if __name__ == '__main__':
         globals().update(dict(
             user=user_in, password=password_in,
             month_and_day=date_in.strftime("%m/%d"), player=player_in,
-            tee_time=tee_in, tee_range=tee_range_in, desired_courses=courses_in
+            tee_time=tee_in, tee_range=tee_range_in, desired_courses=courses_in,
+            dry_run=dry_run_in
         ))
 
         # Drain stale queue entries
@@ -885,6 +932,7 @@ if __name__ == '__main__':
 
         t = threading.Thread(target=main, daemon=True)
         t.start()
+        st.session_state.booking_thread = t
 
         while t.is_alive() or not _log_queue.empty():
             updated = False
