@@ -23,131 +23,35 @@ st.set_page_config(
     page_title="BergenBook · Tee Time",
     page_icon="⛳",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded",
 )
 
 # ─── THEME ────────────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-  [data-testid="stAppViewContainer"] { background: #0c1710; color: #e8f5e9; }
-  [data-testid="stHeader"] { background: transparent; }
-  [data-testid="stDecoration"] { display: none; }
-  .block-container { padding-top: 2rem; }
+from components.styles import inject_global_css
+from components.nav import render_nav
+inject_global_css()
 
-  h1 { color: #7bc47f !important; letter-spacing: -1px; font-size: 2.2rem !important; }
-  h3 { color: #a5d6a7 !important; font-size: 1rem !important; text-transform: uppercase;
-       letter-spacing: 1px; margin-bottom: 1rem !important; }
+# ─── ADMIN GATE ──────────────────────────────────────────────────────────────
+# Set ADMIN_PIN env var in Cloud Run to restrict who can trigger bookings.
+# If not set, admin gate is disabled (local dev).
+ADMIN_PIN = os.environ.get("ADMIN_PIN", "")
 
-  label { color: #c8e6c9 !important; font-size: 0.82rem !important; font-weight: 500 !important; }
+# ─── RATE LIMITING ───────────────────────────────────────────────────────────
+# Max booking attempts per hour (prevents runaway Chrome sessions / cost)
+MAX_BOOKINGS_PER_HOUR = int(os.environ.get("MAX_BOOKINGS_PER_HOUR", "5"))
+_booking_timestamps: list = []
 
-  [data-baseweb="input"] > div,
-  [data-baseweb="select"] > div:first-child {
-      background: #111f14 !important;
-      border: 1px solid #2d5a2d !important;
-      border-radius: 8px !important;
-  }
-  /* All input and select text */
-  input,
-  [data-baseweb="select"] span,
-  [data-baseweb="select"] div,
-  [data-baseweb="select"] [data-testid="stSelectboxVirtualDropdown"] li,
-  [data-baseweb="select"] [role="option"],
-  [data-baseweb="select"] [role="listbox"] li { color: #e8f5e9 !important; }
-  /* Dropdown list background */
-  [data-baseweb="popover"] [data-baseweb="menu"],
-  [data-baseweb="select"] ul,
-  [role="listbox"] {
-      background: #1a2e1e !important;
-      border: 1px solid #2d5a2d !important;
-  }
-  [role="option"]:hover, [role="option"][aria-selected="true"] {
-      background: #2d5a2d !important;
-  }
+def check_rate_limit() -> str | None:
+    """Return error message if rate-limited, else None."""
+    now = datetime.now()
+    cutoff = now - timedelta(hours=1)
+    _booking_timestamps[:] = [t for t in _booking_timestamps if t > cutoff]
+    if len(_booking_timestamps) >= MAX_BOOKINGS_PER_HOUR:
+        return f"Rate limit reached ({MAX_BOOKINGS_PER_HOUR}/hour). Try again later."
+    return None
 
-  .stButton > button {
-      background: linear-gradient(135deg, #2e7d32, #1a4d1e) !important;
-      color: white !important; border: none !important;
-      border-radius: 10px !important; padding: 0.7rem 1rem !important;
-      font-size: 1rem !important; font-weight: 600 !important;
-      width: 100%; letter-spacing: 0.3px;
-      transition: all 0.2s ease;
-  }
-  .stButton > button:hover {
-      background: linear-gradient(135deg, #43a047, #2e7d32) !important;
-      box-shadow: 0 4px 16px rgba(46,125,50,0.45) !important;
-      transform: translateY(-1px);
-  }
-  .stButton > button:disabled { opacity: 0.4 !important; }
-
-  hr { border-color: #1e3d1e !important; margin: 0.75rem 0 !important; }
-
-  .info-pill {
-      display: inline-block; padding: 0.25rem 0.75rem;
-      background: #132518; border: 1px solid #2d5a2d;
-      border-radius: 20px; font-size: 0.78rem; color: #81c784;
-  }
-
-  .log-panel {
-      background: #070e08;
-      border: 1px solid #1a3d1a;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
-      font-size: 0.78rem;
-      line-height: 1.65;
-      height: 430px;
-      overflow-y: auto;
-      color: #69c069;
-      white-space: pre-wrap;
-  }
-  .log-panel .dim  { color: #2d5a2d; }
-  .log-panel .ok   { color: #69f069; }
-  .log-panel .warn { color: #ffd54f; }
-  .log-panel .err  { color: #ff5252; }
-
-  .status-bar {
-      display: flex; align-items: center; gap: 0.5rem;
-      margin-bottom: 0.6rem;
-  }
-  .dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      display: inline-block;
-  }
-  .dot-idle    { background: #2d5a2d; }
-  .dot-running { background: #69f069; box-shadow: 0 0 6px #69f069; animation: pulse 1s infinite; }
-  .dot-done    { background: #00e676; }
-  .dot-error   { background: #ff5252; }
-  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-
-  .status-label { font-size: 0.8rem; font-weight: 600; }
-  .idle-label    { color: #2d5a2d; }
-  .running-label { color: #69f069; }
-  .done-label    { color: #00e676; }
-  .error-label   { color: #ff5252; }
-
-  .field-error {
-      display: flex; align-items: flex-start; gap: 0.45rem;
-      margin: 0.15rem 0 0.4rem;
-      padding: 0.35rem 0.75rem;
-      background: rgba(255,82,82,0.10);
-      border: 1px solid rgba(255,82,82,0.35);
-      border-radius: 7px;
-      color: #ff7070; font-size: 0.77rem; font-weight: 500;
-      line-height: 1.4;
-  }
-  .field-error-icon { font-size: 0.85rem; margin-top: 0.05rem; flex-shrink: 0; }
-
-  .validation-banner {
-      display: flex; align-items: center; gap: 0.6rem;
-      margin-bottom: 1rem; padding: 0.65rem 1rem;
-      background: rgba(255,82,82,0.12);
-      border: 1px solid rgba(255,82,82,0.4);
-      border-radius: 10px;
-      color: #ff6b6b; font-size: 0.85rem; font-weight: 600;
-  }
-  .validation-banner-icon { font-size: 1.1rem; }
-</style>
-""", unsafe_allow_html=True)
+def record_booking_attempt():
+    _booking_timestamps.append(datetime.now())
 
 # ─── MODULE-LEVEL STATE ───────────────────────────────────────────────────────
 _log_queue: queue.Queue = queue.Queue()
@@ -210,8 +114,26 @@ def setup_driver():
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-features=NetworkService')
     chrome_options.add_argument('--disable-features=VizDisplayCompositor')
+
+    # Cloud / Docker: run headless (no display available)
+    if os.environ.get("CLOUD_RUN") or os.environ.get("K_SERVICE") or not os.environ.get("DISPLAY", "").strip():
+        chrome_options.add_argument('--headless=new')
+        chrome_options.add_argument('--window-size=1920,1080')
+        chrome_options.add_argument('--disable-extensions')
+        log("☁️   Running in headless mode (cloud)")
+
     chrome_options.binary_location = chrome_path
-    driver = uc.Chrome(options=chrome_options, version_main=145)
+
+    # Let undetected-chromedriver auto-detect the installed version in Docker
+    uc_kwargs = {"options": chrome_options}
+    if os.path.exists("/usr/bin/chromium"):
+        # Docker/Linux: skip version_main to auto-detect
+        pass
+    else:
+        # Local Mac: pin to installed Chrome version
+        uc_kwargs["version_main"] = 145
+
+    driver = uc.Chrome(**uc_kwargs)
     stealth(driver,
         languages=["en-US", "en"], vendor="Google Inc.", platform="Win32",
         webgl_vendor="Intel Inc.", renderer="Intel Iris OpenGL Engine", fix_hairline=True,
@@ -746,8 +668,15 @@ if __name__ == '__main__':
                 unsafe_allow_html=True
             )
 
-    def validate(user, password, play_date, courses):
+    def validate(user, password, play_date, courses, admin_pin_in=""):
         errs = {}
+        # Admin PIN check (only enforced when ADMIN_PIN env var is set)
+        if ADMIN_PIN and admin_pin_in != ADMIN_PIN:
+            errs['admin_pin'] = "Invalid admin PIN."
+        # Rate limit check
+        rate_err = check_rate_limit()
+        if rate_err:
+            errs['rate_limit'] = rate_err
         if not user.strip():
             errs['user'] = "User ID is required."
         if not password:
@@ -759,6 +688,8 @@ if __name__ == '__main__':
         if not courses:
             errs['courses'] = "Select at least one course."
         return errs
+
+    render_nav()
 
     # Header
     st.markdown("# ⛳ BergenBook")
@@ -862,6 +793,15 @@ if __name__ == '__main__':
             help="Logs in, selects the tee time and players, then stops before confirming — so you can verify everything looks right."
         )
 
+        # Admin PIN (only shown when ADMIN_PIN is configured)
+        admin_pin_in = ""
+        if ADMIN_PIN:
+            admin_pin_in = st.text_input("Admin PIN *", type="password",
+                help="Required to start a booking. Set by the server admin.")
+            ferr('admin_pin')
+
+        ferr('rate_limit')
+
         st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
         run_btn = st.button("🚀 Start Booking", disabled=st.session_state.running)
 
@@ -906,10 +846,12 @@ if __name__ == '__main__':
 
     # ── RUN ───────────────────────────────────────────────────────────────────
     if run_btn:
-        errs = validate(user_in, password_in, date_in, courses_in)
+        errs = validate(user_in, password_in, date_in, courses_in, admin_pin_in)
         st.session_state.errors = errs
         if errs:
             st.rerun()
+
+        record_booking_attempt()
 
         st.session_state.errors  = {}
         st.session_state.running = True
