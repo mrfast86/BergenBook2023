@@ -132,22 +132,24 @@ def setup_driver():
 
     chrome_options.binary_location = chrome_path
 
-    uc_kwargs = {"options": chrome_options}
-
-    # On Linux (Railway), use the system chromedriver directly
     system_chromedriver = "/usr/bin/chromedriver"
     if os.path.exists(system_chromedriver):
-        uc_kwargs["driver_executable_path"] = system_chromedriver
+        # Railway/Linux: use plain selenium with system chromedriver
+        from selenium import webdriver as _wd
+        from selenium.webdriver.chrome.service import Service as _Service
         log(f"🖥️   Using system chromedriver: {system_chromedriver}")
+        driver = _wd.Chrome(
+            service=_Service(executable_path=system_chromedriver),
+            options=chrome_options,
+        )
     else:
-        # Local Mac: pin to installed Chrome version
-        uc_kwargs["version_main"] = 145
+        # Local Mac: use undetected_chromedriver
+        driver = uc.Chrome(options=chrome_options, version_main=145)
+        stealth(driver,
+            languages=["en-US", "en"], vendor="Google Inc.", platform="Win32",
+            webgl_vendor="Intel Inc.", renderer="Intel Iris OpenGL Engine", fix_hairline=True,
+        )
 
-    driver = uc.Chrome(**uc_kwargs)
-    stealth(driver,
-        languages=["en-US", "en"], vendor="Google Inc.", platform="Win32",
-        webgl_vendor="Intel Inc.", renderer="Intel Iris OpenGL Engine", fix_hairline=True,
-    )
     return driver, WebDriverWait(driver, 20)
 
 # ─── POPUP HANDLER ────────────────────────────────────────────────────────────
