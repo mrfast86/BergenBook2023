@@ -132,11 +132,13 @@ def setup_driver():
 
     chrome_options.binary_location = chrome_path
 
-    # Let undetected-chromedriver auto-detect the installed version in Docker
     uc_kwargs = {"options": chrome_options}
-    if os.path.exists("/usr/bin/chromium"):
-        # Docker/Linux: skip version_main to auto-detect
-        pass
+
+    # On Linux (Railway), use the system chromedriver directly
+    system_chromedriver = "/usr/bin/chromedriver"
+    if os.path.exists(system_chromedriver):
+        uc_kwargs["driver_executable_path"] = system_chromedriver
+        log(f"🖥️   Using system chromedriver: {system_chromedriver}")
     else:
         # Local Mac: pin to installed Chrome version
         uc_kwargs["version_main"] = 145
