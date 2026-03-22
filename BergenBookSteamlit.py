@@ -87,11 +87,13 @@ TEE_TIMES = [
 
 # ─── CHROME DRIVER ────────────────────────────────────────────────────────────
 CHROME_PATHS = [
+    os.environ.get("CHROME_BIN", ""),           # explicit override
+    "/usr/bin/chromium",                         # Railway / Linux
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
 ]
 
 def find_chrome():
@@ -116,7 +118,13 @@ def setup_driver():
     chrome_options.add_argument('--disable-features=VizDisplayCompositor')
 
     # Cloud / Docker: run headless (no display available)
-    if os.environ.get("CLOUD_RUN") or os.environ.get("K_SERVICE") or not os.environ.get("DISPLAY", "").strip():
+    _is_cloud = (
+        os.environ.get("RAILWAY_ENVIRONMENT")
+        or os.environ.get("CLOUD_RUN")
+        or os.environ.get("K_SERVICE")
+        or not os.environ.get("DISPLAY", "").strip()
+    )
+    if _is_cloud:
         chrome_options.add_argument('--headless=new')
         chrome_options.add_argument('--window-size=1920,1080')
         chrome_options.add_argument('--disable-extensions')
