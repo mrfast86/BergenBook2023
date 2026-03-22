@@ -88,10 +88,10 @@ TEE_TIMES = [
 # ─── CHROME DRIVER ────────────────────────────────────────────────────────────
 CHROME_PATHS = [
     os.environ.get("CHROME_BIN", ""),           # explicit override
-    "/usr/bin/chromium",                         # Railway / Linux
-    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome-stable",            # Railway / Docker (Google Chrome)
     "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
 ]
@@ -132,14 +132,14 @@ def setup_driver():
 
     chrome_options.binary_location = chrome_path
 
-    system_chromedriver = "/usr/bin/chromedriver"
-    if os.path.exists(system_chromedriver):
-        # Railway/Linux: use plain selenium with system chromedriver
+    if os.path.exists("/usr/bin/google-chrome-stable") or os.path.exists("/usr/bin/google-chrome"):
+        # Railway/Linux: use webdriver_manager to get matching chromedriver
         from selenium import webdriver as _wd
         from selenium.webdriver.chrome.service import Service as _Service
-        log(f"🖥️   Using system chromedriver: {system_chromedriver}")
+        from webdriver_manager.chrome import ChromeDriverManager
+        log("☁️   Fetching matching chromedriver via webdriver_manager…")
         driver = _wd.Chrome(
-            service=_Service(executable_path=system_chromedriver),
+            service=_Service(ChromeDriverManager().install()),
             options=chrome_options,
         )
     else:
