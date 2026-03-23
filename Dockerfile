@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y wget gnupg ca-certificates --no-install
        > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /dev/shm && chmod 1777 /dev/shm
 
 WORKDIR /app
 
