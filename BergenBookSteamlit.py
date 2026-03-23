@@ -115,7 +115,6 @@ def setup_driver():
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--disable-software-rasterizer')
     chrome_options.add_argument('--disable-setuid-sandbox')
-    chrome_options.add_argument('--no-zygote')
     chrome_options.add_argument('--disable-features=NetworkService,VizDisplayCompositor')
     chrome_options.add_argument('--disable-background-networking')
     chrome_options.add_argument('--disable-default-apps')
@@ -219,7 +218,13 @@ def login(driver, wait):
     log("🔐  Clicking Sign In...")
     driver.execute_script("arguments[0].click();", sign_in)
     log("🔐  Waiting for username field...")
-    wait.until(EC.presence_of_element_located((By.NAME, 'username'))).send_keys(user)
+    uname_field = wait.until(EC.presence_of_element_located((By.NAME, 'username')))
+    driver.execute_script("arguments[0].value = arguments[1];", uname_field, user)
+    driver.execute_script(
+        "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
+        "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
+        uname_field
+    )
     wait.until(EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))).click()
     pwd_field = wait.until(EC.element_to_be_clickable((By.ID, 'mat-input-2')))
     driver.execute_script("arguments[0].value = arguments[1];", pwd_field, password)
