@@ -5,7 +5,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
     TimeoutException, NoSuchElementException,
-    ElementClickInterceptedException, UnexpectedAlertPresentException
+    ElementClickInterceptedException, UnexpectedAlertPresentException,
+    WebDriverException
 )
 from selenium_stealth import stealth
 import pause
@@ -122,7 +123,8 @@ def setup_driver():
     chrome_options.add_argument('--metrics-recording-only')
     chrome_options.add_argument('--mute-audio')
     chrome_options.add_argument('--no-first-run')
-    chrome_options.add_argument('--shm-size=256m')
+    chrome_options.add_argument('--disable-renderer-backgrounding')
+    chrome_options.add_argument('--disable-backgrounding-occluded-windows')
 
     # Cloud / Docker: run headless (no display available)
     _is_cloud = (
@@ -217,6 +219,7 @@ def login(driver, wait):
     sign_in = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Sign In')]")))
     log("🔐  Clicking Sign In...")
     driver.execute_script("arguments[0].click();", sign_in)
+    time.sleep(2)  # let the login dialog fully render before polling
     log("🔐  Waiting for username field...")
     uname_field = wait.until(EC.presence_of_element_located((By.NAME, 'username')))
     driver.execute_script("arguments[0].value = arguments[1];", uname_field, user)
@@ -643,8 +646,31 @@ def main():
         log(f"❌  Driver setup failed: {e}")
         _booking_result["error"] = str(e)
         return
+
+    # Login with retry — Chrome can crash in containers on the first attempt
+    for _attempt in range(3):
+        try:
+            login(driver, wait)
+            break
+        except WebDriverException as e:
+            log(f"⚠️   Chrome crashed during login (attempt {_attempt + 1}/3): {e}")
+            try:
+                driver.quit()
+            except Exception:
+                pass
+            if _attempt == 2:
+                log("❌  Login failed after 3 attempts.")
+                _booking_result["error"] = "Chrome crashed repeatedly during login"
+                return
+            time.sleep(3)
+            try:
+                driver, wait = setup_driver()
+            except Exception as e2:
+                log(f"❌  Driver restart failed: {e2}")
+                _booking_result["error"] = str(e2)
+                return
+
     try:
-        login(driver, wait)
         select_courses(driver, wait)
         select_player_filter(driver, wait)
         wait_until_booking(driver, wait)
@@ -789,6 +815,7 @@ if __name__ == '__main__':
         courses_in = st.multiselect(
             "Courses * — select in priority order (1st = preferred)",
             COURSES,
+            default=["Rockleigh R/W 18", "Soldier Hill 18"],
             help="The bot searches all selected courses and books from your top priority down."
         )
         ferr('courses')
